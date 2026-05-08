@@ -1,0 +1,3 @@
+[submodule "vendor/acp-sdk"]
+	path = vendor/acp-sdk
+	url = https://github.com/agentclientprotocol/python-sdk
