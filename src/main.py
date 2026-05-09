@@ -60,7 +60,9 @@ SCENARIOS: dict[str, list] = {
             _load_golden("session_update_agent_thought_chunk")
         )
     ],
-    "plan": [lambda: AgentPlanUpdate.model_validate(_load_golden("session_update_plan"))],
+    "plan": [
+        lambda: AgentPlanUpdate.model_validate(_load_golden("session_update_plan"))
+    ],
     "tool_call": [
         lambda: ToolCallStart.model_validate(_load_golden("session_update_tool_call")),
         lambda: ToolCallProgress.model_validate(
@@ -71,10 +73,14 @@ SCENARIOS: dict[str, list] = {
         ),
     ],
     "tool_call_read": [
-        lambda: ToolCallStart.model_validate(_load_golden("session_update_tool_call_read"))
+        lambda: ToolCallStart.model_validate(
+            _load_golden("session_update_tool_call_read")
+        )
     ],
     "tool_call_edit": [
-        lambda: ToolCallStart.model_validate(_load_golden("session_update_tool_call_edit"))
+        lambda: ToolCallStart.model_validate(
+            _load_golden("session_update_tool_call_edit")
+        )
     ],
     "tool_call_locations": [
         lambda: ToolCallStart.model_validate(
@@ -106,9 +112,21 @@ SCENARIOS: dict[str, list] = {
             _load_golden("session_update_user_message_chunk")
         )
     ],
-    "available_commands": [lambda: AvailableCommandsUpdate.model_validate(_load_extra("session_update_available_commands"))],
-    "current_mode": [lambda: CurrentModeUpdate.model_validate(_load_extra("session_update_current_mode"))],
-    "session_info": [lambda: SessionInfoUpdate.model_validate(_load_extra("session_update_session_info"))],
+    "available_commands": [
+        lambda: AvailableCommandsUpdate.model_validate(
+            _load_extra("session_update_available_commands")
+        )
+    ],
+    "current_mode": [
+        lambda: CurrentModeUpdate.model_validate(
+            _load_extra("session_update_current_mode")
+        )
+    ],
+    "session_info": [
+        lambda: SessionInfoUpdate.model_validate(
+            _load_extra("session_update_session_info")
+        )
+    ],
     "usage": [lambda: UsageUpdate.model_validate(_load_extra("session_update_usage"))],
 }
 
@@ -121,7 +139,6 @@ def _load_golden(name: str) -> dict:
 
 def _load_extra(name: str) -> dict:
     return json.loads((FIXTURES / f"{name}.json").read_text())
-
 
 
 def _extract_text(prompt: list) -> str:
@@ -157,9 +174,7 @@ class MockAgent:
         mcp_servers: list[HttpMcpServer | SseMcpServer | McpServerStdio] | None = None,
         **kwargs: Any,
     ) -> NewSessionResponse:
-        data = _load_golden("new_session_response")
-        data["sessionId"] = uuid4().hex
-        return NewSessionResponse.model_validate(data)
+        return NewSessionResponse.model_validate(_load_golden("new_session_response"))
 
     async def cancel(self, session_id: str, **kwargs: Any) -> None:
         pass
@@ -275,7 +290,9 @@ class MockAgent:
             keyword = text[len("test ") :]
             if keyword == "all":
                 for factory in ALL_SCENARIOS:
-                    await self._conn.session_update(session_id=session_id, update=factory())
+                    await self._conn.session_update(
+                        session_id=session_id, update=factory()
+                    )
                 await self._test_request_permission(session_id)
                 await self._test_fs_read(session_id)
                 await self._test_fs_write(session_id)
@@ -288,7 +305,9 @@ class MockAgent:
             else:
                 steps = SCENARIOS.get(keyword, [])
                 for factory in steps:
-                    await self._conn.session_update(session_id=session_id, update=factory())
+                    await self._conn.session_update(
+                        session_id=session_id, update=factory()
+                    )
 
         return PromptResponse(stop_reason="end_turn", user_message_id=message_id)
 
