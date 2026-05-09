@@ -13,7 +13,7 @@ The server runs over stdio and is launched as a subprocess by the client, matchi
 
 ## Installation
 
-**Prerequisites:** Git, and [direnv](https://direnv.net/).
+**Prerequisites:** Git, and [direnv](https://direnv.net/). If you want to run tests, [emacs](https://www.gnu.org/software/emacs/).
 
 ```bash
 git clone https://github.com/junyi-hou/mock-acp
@@ -26,7 +26,7 @@ make build
 ## Running
 
 ```bash
-direnv exec <project-path> python src/main.py
+direnv exec <project-path> python <project-path>/src/main.py
 ```
 
 ## Request → Response reference
