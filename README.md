@@ -11,10 +11,22 @@ Responses are sourced from two places:
 
 The server runs over stdio and is launched as a subprocess by the client, matching the standard ACP transport model.
 
+## Installation
+
+**Prerequisites:** Git, and [direnv](https://direnv.net/).
+
+```bash
+git clone https://github.com/junyi-hou/mock-acp
+cd mock-acp
+direnv allow
+make build
+```
+`direnv allow` installs Python dependencies into `.venv/`, and `make build` initializes the `vendor/acp-sdk` submodule.
+
 ## Running
 
 ```bash
-python src/main.py
+direnv exec <project-path> python src/main.py
 ```
 
 ## Request → Response reference
