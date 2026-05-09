@@ -11,8 +11,8 @@ $(ACP_SRC):
 	mkdir -p $(DEPS_DIR)
 	git clone https://github.com/xenodium/acp.el $@
 
-.PHONY: test-integration
-test-integration: $(ACP_SRC) ## Run the ACP integration tests via ERT
+.PHONY: test
+test: $(ACP_SRC) ## Run the ACP tests via ERT
 	@emacs -Q --batch \
 		-L "$(ACP_SRC)" \
 		-L "$(dir $(TEST_FILE))" \
