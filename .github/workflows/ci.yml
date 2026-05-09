@@ -1,0 +1,31 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Setup Emacs
+        uses: purcell/setup-emacs@master
+        with:
+          version: "31"
+
+      - name: Install direnv
+        run: sudo apt-get install -y direnv
+
+      - name: Load environment variables
+        run: |
+          direnv allow .
+          direnv export gha > "$GITHUB_ENV"
+
+      - name: Build
+        run: make build
+
+      - name: Run tests
+        run: make test
