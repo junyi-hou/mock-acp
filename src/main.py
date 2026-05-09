@@ -7,6 +7,8 @@ from uuid import uuid4
 from acp import run_agent
 from acp.interfaces import Client
 from acp.schema import (
+    PermissionOption,
+    ToolCallUpdate,
     AuthenticateResponse,
     CloseSessionResponse,
     ForkSessionResponse,
@@ -19,7 +21,6 @@ from acp.schema import (
     AgentPlanUpdate,
     AgentThoughtChunk,
     AudioContentBlock,
-    AvailableCommand,
     AvailableCommandsUpdate,
     ClientCapabilities,
     ConfigOptionUpdate,
@@ -44,94 +45,83 @@ from acp.schema import (
 )
 
 GOLDEN = Path(__file__).parent.parent / "vendor" / "acp-sdk" / "tests" / "golden"
-
-
-def _available_commands_update() -> AvailableCommandsUpdate:
-    return AvailableCommandsUpdate(
-        session_update="available_commands_update",
-        available_commands=[
-            AvailableCommand(
-                name="create_plan", description="Create a plan for the current task"
-            ),
-            AvailableCommand(
-                name="research_codebase", description="Research the codebase"
-            ),
-        ],
-    )
-
-
-def _current_mode_update() -> CurrentModeUpdate:
-    return CurrentModeUpdate(
-        session_update="current_mode_update", current_mode_id="default"
-    )
-
-
-def _session_info_update() -> SessionInfoUpdate:
-    return SessionInfoUpdate(
-        session_update="session_info_update",
-        title="Mock session",
-        updated_at="2026-01-01T00:00:00Z",
-    )
-
-
-def _usage_update() -> UsageUpdate:
-    return UsageUpdate(session_update="usage_update", size=4096, used=512)
+FIXTURES = Path(__file__).parent.parent / "fixtures"
 
 
 # Each scenario is an ordered list of callables returning a session update object.
 SCENARIOS: dict[str, list] = {
     "agent_message": [
         lambda: AgentMessageChunk.model_validate(
-            _load("session_update_agent_message_chunk")
+            _load_golden("session_update_agent_message_chunk")
         )
     ],
     "thought": [
         lambda: AgentThoughtChunk.model_validate(
-            _load("session_update_agent_thought_chunk")
+            _load_golden("session_update_agent_thought_chunk")
         )
     ],
-    "plan": [lambda: AgentPlanUpdate.model_validate(_load("session_update_plan"))],
+    "plan": [lambda: AgentPlanUpdate.model_validate(_load_golden("session_update_plan"))],
     "tool_call": [
-        lambda: ToolCallStart.model_validate(_load("session_update_tool_call")),
+        lambda: ToolCallStart.model_validate(_load_golden("session_update_tool_call")),
         lambda: ToolCallProgress.model_validate(
-            _load("session_update_tool_call_update_content")
+            _load_golden("session_update_tool_call_update_content")
         ),
         lambda: ToolCallProgress.model_validate(
-            _load("session_update_tool_call_update_more_fields")
+            _load_golden("session_update_tool_call_update_more_fields")
         ),
     ],
     "tool_call_read": [
-        lambda: ToolCallStart.model_validate(_load("session_update_tool_call_read"))
+        lambda: ToolCallStart.model_validate(_load_golden("session_update_tool_call_read"))
     ],
     "tool_call_edit": [
-        lambda: ToolCallStart.model_validate(_load("session_update_tool_call_edit"))
+        lambda: ToolCallStart.model_validate(_load_golden("session_update_tool_call_edit"))
     ],
     "tool_call_locations": [
         lambda: ToolCallStart.model_validate(
-            _load("session_update_tool_call_locations_rawinput")
+            _load_golden("session_update_tool_call_locations_rawinput")
+        )
+    ],
+    "tool_call_diff": [
+        lambda: ToolCallProgress.model_validate(
+            _load_extra("session_update_tool_call_update_diff_content")
+        )
+    ],
+    "tool_call_diff_no_old": [
+        lambda: ToolCallProgress.model_validate(
+            _load_extra("session_update_tool_call_update_diff_no_old_content")
+        )
+    ],
+    "tool_call_terminal": [
+        lambda: ToolCallProgress.model_validate(
+            _load_extra("session_update_tool_call_update_terminal_content")
         )
     ],
     "config_option": [
         lambda: ConfigOptionUpdate.model_validate(
-            _load("session_update_config_option_update")
+            _load_golden("session_update_config_option_update")
         )
     ],
     "user_message": [
         lambda: UserMessageChunk.model_validate(
-            _load("session_update_user_message_chunk")
+            _load_golden("session_update_user_message_chunk")
         )
     ],
-    "available_commands": [_available_commands_update],
-    "current_mode": [_current_mode_update],
-    "session_info": [_session_info_update],
-    "usage": [_usage_update],
+    "available_commands": [lambda: AvailableCommandsUpdate.model_validate(_load_extra("session_update_available_commands"))],
+    "current_mode": [lambda: CurrentModeUpdate.model_validate(_load_extra("session_update_current_mode"))],
+    "session_info": [lambda: SessionInfoUpdate.model_validate(_load_extra("session_update_session_info"))],
+    "usage": [lambda: UsageUpdate.model_validate(_load_extra("session_update_usage"))],
 }
 
 ALL_SCENARIOS = [step for steps in SCENARIOS.values() for step in steps]
 
 
-def _load(name: str) -> dict:
+def _load_golden(name: str) -> dict:
     return json.loads((GOLDEN / f"{name}.json").read_text())
+
+
+def _load_extra(name: str) -> dict:
+    return json.loads((FIXTURES / f"{name}.json").read_text())
+
 
 
 def _extract_text(prompt: list) -> str:
@@ -159,7 +149,7 @@ class MockAgent:
         client_info: Implementation | None = None,
         **kwargs: Any,
     ) -> InitializeResponse:
-        return InitializeResponse.model_validate(_load("initialize_response"))
+        return InitializeResponse.model_validate(_load_golden("initialize_response"))
 
     async def new_session(
         self,
@@ -167,7 +157,7 @@ class MockAgent:
         mcp_servers: list[HttpMcpServer | SseMcpServer | McpServerStdio] | None = None,
         **kwargs: Any,
     ) -> NewSessionResponse:
-        data = _load("new_session_response")
+        data = _load_golden("new_session_response")
         data["sessionId"] = uuid4().hex
         return NewSessionResponse.model_validate(data)
 
@@ -241,6 +231,31 @@ class MockAgent:
     ) -> ListSessionsResponse:
         return ListSessionsResponse(sessions=[])
 
+    async def _test_request_permission(self, session_id: str) -> None:
+        options = [
+            PermissionOption.model_validate(o)
+            for o in _load_golden("request_permission_request")["options"]
+        ]
+        tool_call = ToolCallUpdate(tool_call_id="call_001")
+        await self._conn.request_permission(
+            options=options, session_id=session_id, tool_call=tool_call
+        )
+
+    async def _test_fs_read(self, session_id: str) -> None:
+        req = _load_golden("fs_read_text_file_request")
+        await self._conn.read_text_file(
+            path=req["path"],
+            session_id=session_id,
+            line=req.get("line"),
+            limit=req.get("limit"),
+        )
+
+    async def _test_fs_write(self, session_id: str) -> None:
+        req = _load_golden("fs_write_text_file_request")
+        await self._conn.write_text_file(
+            content=req["content"], path=req["path"], session_id=session_id
+        )
+
     async def prompt(
         self,
         prompt: list[
@@ -258,9 +273,22 @@ class MockAgent:
 
         if text.startswith("test "):
             keyword = text[len("test ") :]
-            steps = ALL_SCENARIOS if keyword == "all" else SCENARIOS.get(keyword, [])
-            for factory in steps:
-                await self._conn.session_update(session_id=session_id, update=factory())
+            if keyword == "all":
+                for factory in ALL_SCENARIOS:
+                    await self._conn.session_update(session_id=session_id, update=factory())
+                await self._test_request_permission(session_id)
+                await self._test_fs_read(session_id)
+                await self._test_fs_write(session_id)
+            elif keyword == "request_permission":
+                await self._test_request_permission(session_id)
+            elif keyword == "fs_read":
+                await self._test_fs_read(session_id)
+            elif keyword == "fs_write":
+                await self._test_fs_write(session_id)
+            else:
+                steps = SCENARIOS.get(keyword, [])
+                for factory in steps:
+                    await self._conn.session_update(session_id=session_id, update=factory())
 
         return PromptResponse(stop_reason="end_turn", user_message_id=message_id)
 

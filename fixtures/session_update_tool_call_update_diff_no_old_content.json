@@ -1,0 +1,12 @@
+{
+  "sessionUpdate": "tool_call_update",
+  "toolCallId": "call_001",
+  "status": "in_progress",
+  "content": [
+    {
+      "type": "diff",
+      "path": "/home/user/project/src/config.json",
+      "newText": "{\n  \"debug\": true\n}"
+    }
+  ]
+}

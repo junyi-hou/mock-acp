@@ -4,7 +4,10 @@ A mock ACP server that returns deterministic responses to all ACP protocol reque
 
 ## How it works
 
-Responses are sourced from the [ACP Python SDK](https://github.com/agentclientprotocol/python-sdk)'s golden test fixtures (`vendor/acp-sdk/tests/golden/`). These are the canonical JSON payloads the SDK uses to validate protocol conformance, so they are always spec-correct.
+Responses are sourced from two places:
+
+- **`vendor/acp-sdk/tests/golden/`** — the [ACP Python SDK](https://github.com/agentclientprotocol/python-sdk)'s canonical JSON fixtures, used verbatim. These are spec-correct by definition.
+- **`fixtures/`** — hand-crafted fixtures for message types not covered by the SDK's golden set.
 
 The server runs over stdio and is launched as a subprocess by the client, matching the standard ACP transport model.
 
@@ -16,80 +19,60 @@ python src/main.py
 
 ## Request → Response reference
 
-### `initialize`
+### Client → Agent requests
 
-Returns the golden `initialize_response.json`:
+| Method | Response |
+|---|---|
+| `initialize` | Golden `initialize_response.json` (protocol v1, all capabilities) |
+| `session/new` | Golden `new_session_response.json` with a fresh random `sessionId` |
+| `session/fork` | Fresh random `sessionId` |
+| `session/resume` | Empty response body |
+| `session/list` | `{ "sessions": [] }` |
+| `session/load` | `null` |
+| `session/close` | `null` |
+| `session/set_mode` | `null` |
+| `session/set_model` | `null` |
+| `session/set_config_option` | `null` |
+| `authenticate` | `null` |
+| `session/cancel` | *(notification, no response)* |
+| `session/prompt` | `{ "stopReason": "end_turn" }` + optional scenario updates (see below) |
 
-```json
-{
-  "protocolVersion": 1,
-  "agentCapabilities": {
-    "loadSession": true,
-    "mcpCapabilities": {},
-    "promptCapabilities": { "image": true, "audio": true, "embeddedContext": true },
-    "sessionCapabilities": {}
-  },
-  "authMethods": []
-}
-```
+### Agent → Client requests (triggered by prompt scenarios)
 
-### `new_session`
-
-Returns the golden `new_session_response.json` with a fresh random `sessionId` per call:
-
-```json
-{ "sessionId": "<random uuid hex>" }
-```
-
-### `fork_session` / `resume_session`
-
-Returns a new random `sessionId`. `resume_session` returns an empty response body.
-
-### `load_session` / `close_session` / `set_session_mode` / `set_session_model` / `set_config_option` / `authenticate`
-
-All return `null` (optional responses, indicating no-op).
-
-### `list_sessions`
-
-Returns an empty sessions list:
-
-```json
-{ "sessions": [] }
-```
-
-### `cancel` / `ext_notification`
-
-No-op notifications, no response.
-
-### `ext_method`
-
-Returns `{}`.
-
-### `prompt`
-
-Returns `{ "stopReason": "end_turn" }`. Before returning, the server may emit `session_update` notifications depending on the prompt text (see below).
+| Scenario | Method | Fixture |
+|---|---|---|
+| `test request_permission` | `session/request_permission` | Golden `request_permission_request.json` |
+| `test fs_read` | `fs/read_text_file` | Golden `fs_read_text_file_request.json` |
+| `test fs_write` | `fs/write_text_file` | Golden `fs_write_text_file_request.json` |
 
 ---
 
 ## Session update scenarios
 
-Send a prompt with text `"test <scenario>"` to trigger specific `session_update` notifications. Use `"test all"` to fire all scenarios in sequence.
+Send a prompt with text `"test <scenario>"` to trigger `session/update` notifications before the response. Use `"test all"` to fire every scenario in sequence.
 
-| Prompt text | Updates sent | Golden fixture(s) |
+### `session/update` notifications (golden fixtures)
+
+| Prompt | Type | Fixture |
 |---|---|---|
 | `test agent_message` | `AgentMessageChunk` | `session_update_agent_message_chunk.json` |
 | `test thought` | `AgentThoughtChunk` | `session_update_agent_thought_chunk.json` |
 | `test plan` | `AgentPlanUpdate` | `session_update_plan.json` |
-| `test tool_call` | `ToolCallStart` → `ToolCallProgress` × 2 | `session_update_tool_call.json`, `session_update_tool_call_update_content.json`, `session_update_tool_call_update_more_fields.json` |
-| `test tool_call_read` | `ToolCallStart` (read variant) | `session_update_tool_call_read.json` |
-| `test tool_call_edit` | `ToolCallStart` (edit variant) | `session_update_tool_call_edit.json` |
-| `test tool_call_locations` | `ToolCallStart` (with locations + raw input) | `session_update_tool_call_locations_rawinput.json` |
+| `test tool_call` | `ToolCallStart` → `ToolCallProgress` × 2 | `session_update_tool_call.json`, `…_update_content.json`, `…_update_more_fields.json` |
+| `test tool_call_read` | `ToolCallStart` (read) | `session_update_tool_call_read.json` |
+| `test tool_call_edit` | `ToolCallStart` (edit) | `session_update_tool_call_edit.json` |
+| `test tool_call_locations` | `ToolCallStart` (locations + raw input) | `session_update_tool_call_locations_rawinput.json` |
 | `test config_option` | `ConfigOptionUpdate` | `session_update_config_option_update.json` |
 | `test user_message` | `UserMessageChunk` | `session_update_user_message_chunk.json` |
-| `test available_commands` | `AvailableCommandsUpdate` (hand-crafted) | — |
-| `test current_mode` | `CurrentModeUpdate` (hand-crafted) | — |
-| `test session_info` | `SessionInfoUpdate` (hand-crafted) | — |
-| `test usage` | `UsageUpdate` (hand-crafted) | — |
-| `test all` | All of the above in order | — |
 
-Scenarios without a golden fixture are constructed with minimal hard-coded values since the SDK does not ship golden data for those types.
+### `session/update` notifications (extra fixtures)
+
+| Prompt | Type | Fixture |
+|---|---|---|
+| `test tool_call_diff` | `ToolCallProgress` (diff content) | `fixtures/session_update_tool_call_update_diff_content.json` |
+| `test tool_call_diff_no_old` | `ToolCallProgress` (diff, new only) | `fixtures/session_update_tool_call_update_diff_no_old_content.json` |
+| `test tool_call_terminal` | `ToolCallProgress` (terminal ref) | `fixtures/session_update_tool_call_update_terminal_content.json` |
+| `test available_commands` | `AvailableCommandsUpdate` | `fixtures/session_update_available_commands.json` |
+| `test current_mode` | `CurrentModeUpdate` | `fixtures/session_update_current_mode.json` |
+| `test session_info` | `SessionInfoUpdate` | `fixtures/session_update_session_info.json` |
+| `test usage` | `UsageUpdate` | `fixtures/session_update_usage.json` |
