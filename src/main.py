@@ -1,4 +1,5 @@
 import asyncio
+import copy
 import json
 from pathlib import Path
 from typing import Any
@@ -61,7 +62,10 @@ SCENARIOS: dict[str, list] = {
         )
     ],
     "plan": [
-        lambda: AgentPlanUpdate.model_validate(_load_golden("session_update_plan"))
+        lambda: AgentPlanUpdate.model_validate(_load_golden("session_update_plan")),
+        lambda: AgentPlanUpdate.model_validate(
+            _complete_plan(_load_golden("session_update_plan"))
+        ),
     ],
     "tool_call": [
         lambda: ToolCallStart.model_validate(_load_golden("session_update_tool_call")),
@@ -69,38 +73,74 @@ SCENARIOS: dict[str, list] = {
             _load_golden("session_update_tool_call_update_content")
         ),
         lambda: ToolCallProgress.model_validate(
-            _load_golden("session_update_tool_call_update_more_fields")
+            _complete_tool_call(
+                _load_golden("session_update_tool_call"), "File read successfully."
+            )
         ),
     ],
     "tool_call_read": [
         lambda: ToolCallStart.model_validate(
             _load_golden("session_update_tool_call_read")
-        )
+        ),
+        lambda: ToolCallProgress.model_validate(
+            _complete_tool_call(
+                _load_golden("session_update_tool_call_read"), "File read successfully."
+            )
+        ),
     ],
     "tool_call_edit": [
         lambda: ToolCallStart.model_validate(
             _load_golden("session_update_tool_call_edit")
-        )
+        ),
+        lambda: ToolCallProgress.model_validate(
+            _complete_tool_call(
+                _load_golden("session_update_tool_call_edit"), "Edit applied successfully."
+            )
+        ),
     ],
     "tool_call_locations": [
         lambda: ToolCallStart.model_validate(
             _load_golden("session_update_tool_call_locations_rawinput")
-        )
+        ),
+        lambda: ToolCallProgress.model_validate(
+            _complete_tool_call(
+                _load_golden("session_update_tool_call_locations_rawinput"),
+                "File tracked successfully.",
+            )
+        ),
     ],
     "tool_call_diff": [
         lambda: ToolCallProgress.model_validate(
             _load_extra("session_update_tool_call_update_diff_content")
-        )
+        ),
+        lambda: ToolCallProgress.model_validate(
+            _complete_tool_call(
+                _load_extra("session_update_tool_call_update_diff_content"),
+                "Edit with diff applied successfully.",
+            )
+        ),
     ],
     "tool_call_diff_no_old": [
         lambda: ToolCallProgress.model_validate(
             _load_extra("session_update_tool_call_update_diff_no_old_content")
-        )
+        ),
+        lambda: ToolCallProgress.model_validate(
+            _complete_tool_call(
+                _load_extra("session_update_tool_call_update_diff_no_old_content"),
+                "New file created successfully.",
+            )
+        ),
     ],
     "tool_call_terminal": [
         lambda: ToolCallProgress.model_validate(
             _load_extra("session_update_tool_call_update_terminal_content")
-        )
+        ),
+        lambda: ToolCallProgress.model_validate(
+            _complete_tool_call(
+                _load_extra("session_update_tool_call_update_terminal_content"),
+                "Terminal command completed.\n$ npm install\nadded 42 packages in 2s",
+            )
+        ),
     ],
     "config_option": [
         lambda: ConfigOptionUpdate.model_validate(
@@ -151,6 +191,30 @@ def _extract_text(prompt: list) -> str:
         if text:
             return text
     return ""
+
+
+def _complete_tool_call(base: dict, content_text: str) -> dict:
+    """Build a completed ToolCallProgress dict from a start or progress fixture."""
+    result = {
+        "sessionUpdate": "tool_call_update",
+        "toolCallId": base["toolCallId"],
+        "status": "completed",
+        "content": [
+            {"type": "content", "content": {"type": "text", "text": content_text}}
+        ],
+    }
+    for field in ("title", "kind", "locations"):
+        if field in base:
+            result[field] = base[field]
+    return result
+
+
+def _complete_plan(base: dict) -> dict:
+    """Deep-copy a plan fixture and mark every entry completed."""
+    result = copy.deepcopy(base)
+    for entry in result["entries"]:
+        entry["status"] = "completed"
+    return result
 
 
 class MockAgent:
@@ -293,6 +357,7 @@ class MockAgent:
                     await self._conn.session_update(
                         session_id=session_id, update=factory()
                     )
+                    await asyncio.sleep(0.1)
                 await self._test_request_permission(session_id)
                 await self._test_fs_read(session_id)
                 await self._test_fs_write(session_id)
@@ -308,6 +373,7 @@ class MockAgent:
                     await self._conn.session_update(
                         session_id=session_id, update=factory()
                     )
+                    await asyncio.sleep(0.1)
 
         return PromptResponse(stop_reason="end_turn", user_message_id=message_id)
 

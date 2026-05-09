@@ -5,7 +5,7 @@
 (require 'cl-lib)
 
 (defconst mock-acp-integration--project-root
-  (file-name-as-directory (expand-file-name ".." (file-name-directory load-file-name)))
+  (locate-dominating-file (or load-file-name default-directory) "pyproject.toml")
   "Root directory of the mock-acp project.")
 
 (defconst mock-acp-integration--python
@@ -115,7 +115,7 @@ mutated in place as requests arrive. Use (cdr collected) for the actual items."
       (should (map-nested-elt result '(agentCapabilities promptCapabilities))))))
 
 (ert-deftest mock-acp-integration-session-new ()
-  "Session/new returns a 32-char hex session ID."
+  "Session/new returns the golden session ID."
   (mock-acp-integration--with-client client
     (mock-acp-integration--initialize client)
     (let ((result (mock-acp-integration--new-session client)))
@@ -193,13 +193,22 @@ mutated in place as requests arrive. Use (cdr collected) for the actual items."
            (result (mock-acp-integration--prompt client session-id "test plan"))
            (notifications (cdr collected)))
       (should result)
-      (should (= (length notifications) 1))
-      (let* ((n (car notifications))
-             (update (mock-acp-integration--update n)))
+      ;; see `src/main.py' line 63 - 68
+      (should (= (length notifications) 2))
+      (let* ((first (car notifications))
+             (update (mock-acp-integration--update first)))
         (should (equal (map-elt update 'sessionUpdate) "plan"))
         (let ((entries (map-elt update 'entries)))
           (should entries)
-          (should (= (length entries) 2)))))))
+          (should (= (length entries) 2))))
+
+      (let* ((second (cadr notifications))
+             (update (mock-acp-integration--update second)))
+        (should (equal (map-elt update 'sessionUpdate) "plan"))
+        (let ((entries (map-elt update 'entries)))
+          (should entries)
+          (should (= (length entries) 2))
+          (should (equal (mapcar (lambda (e) (map-elt e 'status)) entries) '("completed" "completed"))))))))
 
 (ert-deftest mock-acp-integration-prompt-tool-call ()
   "Prompt with 'test tool_call' triggers ToolCallStart and ToolCallProgress."
@@ -211,13 +220,40 @@ mutated in place as requests arrive. Use (cdr collected) for the actual items."
            (result (mock-acp-integration--prompt client session-id "test tool_call"))
            (notifications (cdr collected)))
       (should result)
-      (let ((types (mapcar #'mock-acp-integration--update-type notifications)))
+      (let ((types (mapcar #'mock-acp-integration--update-type notifications))
+            (status (mapcar (lambda (n) (map-nested-elt n '(params update status))) notifications)))
         (should (member "tool_call" types))
-        (should (member "tool_call_update" types)))
+        (should (member "tool_call_update" types))
+        (should (equal "pending" (car status)))
+        (should (equal "in_progress" (cadr status)))
+        (should (equal "completed" (caddr status))))
+
       (let ((start (cl-find "tool_call" notifications
                             :test #'equal :key #'mock-acp-integration--update-type)))
         (should (equal (map-elt (mock-acp-integration--update start) 'toolCallId)
                        "call_001"))))))
+
+(ert-deftest mock-acp-integration-prompt-tool-call-locations ()
+  "Prompt with 'test tool_call_locations' triggers a ToolCallStart with locations and rawInput."
+  (mock-acp-integration--with-client client
+    (mock-acp-integration--initialize client)
+    (let* ((session (mock-acp-integration--new-session client))
+           (session-id (map-elt session 'sessionId))
+           (collected (mock-acp-integration--collect-notifications client))
+           (result (mock-acp-integration--prompt client session-id "test tool_call_locations"))
+           (notifications (cdr collected)))
+      (should result)
+      (should (= (length notifications) 2))
+      (let ((start (cl-find "tool_call" notifications
+                            :test #'equal :key #'mock-acp-integration--update-type)))
+        (should start)
+        (let* ((update (mock-acp-integration--update start))
+               (locations (map-elt update 'locations))
+               (raw-input (map-elt update 'rawInput)))
+          (should locations)
+          (should (= (length locations) 1))
+          (should (equal (map-elt (aref locations 0) 'path) "/home/user/project/src/config.json"))
+          (should (equal (map-elt raw-input 'path) "/home/user/project/src/config.json")))))))
 
 (ert-deftest mock-acp-integration-prompt-user-message ()
   "Prompt with 'test user_message' triggers a UserMessageChunk notification."
