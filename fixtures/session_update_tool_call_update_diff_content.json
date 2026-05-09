@@ -1,6 +1,7 @@
 {
   "sessionUpdate": "tool_call_update",
   "toolCallId": "call_001",
+  "title": "Applying edits to config",
   "status": "in_progress",
   "content": [
     {
