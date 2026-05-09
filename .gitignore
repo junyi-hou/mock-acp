@@ -2,3 +2,4 @@
 .venv/
 /.agent-shell/
 **/__pycache__/
+/deps/

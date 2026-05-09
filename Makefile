@@ -1,4 +1,5 @@
-ACP_SRC := $(HOME)/.emacs.d/elpaca/sources/acp
+DEPS_DIR  := $(CURDIR)/deps
+ACP_SRC   := $(DEPS_DIR)/acp
 TEST_FILE := $(CURDIR)/tests/mock-acp-integration-test.el
 
 .PHONY: build
@@ -6,8 +7,12 @@ build: ## Initialize submodules and sync Python dependencies
 	git submodule update --init --recursive
 	uv sync
 
+$(ACP_SRC):
+	mkdir -p $(DEPS_DIR)
+	git clone https://github.com/xenodium/acp.el $@
+
 .PHONY: test-integration
-test-integration: ## Run the ACP integration tests via ERT
+test-integration: $(ACP_SRC) ## Run the ACP integration tests via ERT
 	@emacs -Q --batch \
 		-L "$(ACP_SRC)" \
 		-L "$(dir $(TEST_FILE))" \
