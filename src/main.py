@@ -6,6 +6,7 @@ from typing import Any
 from uuid import uuid4
 
 from acp import run_agent
+from acp.exceptions import RequestError
 from acp.interfaces import Client
 from acp.schema import (
     PermissionOption,
@@ -367,6 +368,10 @@ class MockAgent:
                 await self._test_fs_read(session_id)
             elif keyword == "fs_write":
                 await self._test_fs_write(session_id)
+            elif keyword == "error":
+                raise RequestError.internal_error(
+                    {"details": "Intentionally triggered error for testing."}
+                )
             else:
                 steps = SCENARIOS.get(keyword, [])
                 for factory in steps:

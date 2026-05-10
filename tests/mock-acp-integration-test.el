@@ -392,5 +392,24 @@ mutated in place as requests arrive. Use (cdr collected) for the actual items."
           (should (member "fs/read_text_file" methods))
           (should (member "fs/write_text_file" methods)))))))
 
+;;; Error handling tests
+
+(ert-deftest mock-acp-integration-prompt-error ()
+  "Prompt with 'test error' causes the agent to raise a RequestError.
+The error response contains code -32603 and message \"Internal error\"."
+  (mock-acp-integration--with-client client
+    (mock-acp-integration--initialize client)
+    (let* ((session (mock-acp-integration--new-session client))
+           (session-id (map-elt session 'sessionId))
+           error-msg)
+      (condition-case err
+          (mock-acp-integration--prompt client session-id "test error")
+        (error (setq error-msg (cdr err))))
+      (should error-msg)
+      (let ((msg (format "%s" error-msg)))
+        (should (string-match "ACP request failed" msg))
+        (should (string-match "-32603" msg))
+        (should (string-match "Internal error" msg))))))
+
 (provide 'mock-acp-integration-test)
 ;;; mock-acp-integration-test.el ends here
