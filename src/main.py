@@ -263,11 +263,18 @@ class ScenarioAgent(MockAgent):
             else:
                 steps = SCENARIOS.get(keyword, [])
                 delay = SCENARIO_DELAYS.get(keyword, 0.1)
-                for factory in steps:
-                    await self._conn.session_update(
-                        session_id=session_id, update=factory()
-                    )
-                    await asyncio.sleep(delay)
+                cancel_event = asyncio.Event()
+                self._cancelled[session_id] = cancel_event
+                try:
+                    for factory in steps:
+                        if cancel_event.is_set():
+                            break
+                        await self._conn.session_update(
+                            session_id=session_id, update=factory()
+                        )
+                        await asyncio.sleep(delay)
+                finally:
+                    self._cancelled.pop(session_id, None)
 
         return PromptResponse(stop_reason="end_turn", user_message_id=message_id)
 

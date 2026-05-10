@@ -414,6 +414,38 @@ mutated in place as requests arrive. Use (cdr collected) for the actual items."
           (should (member "fs/read_text_file" methods))
           (should (member "fs/write_text_file" methods)))))))
 
+;;; Cancel tests
+
+(ert-deftest mock-acp-integration-cancel-long-running ()
+  "Cancelling a long_running session mid-flight stops notifications early."
+  (mock-acp-integration--with-client client
+    (mock-acp-integration--initialize client)
+    (let* ((session (mock-acp-integration--new-session client))
+           (session-id (map-elt session 'sessionId))
+           (collected (mock-acp-integration--collect-notifications client))
+           done result)
+      (acp-send-request
+       :client client
+       :request (acp-make-session-prompt-request
+                 :session-id session-id
+                 :prompt `(((type . "text") (text . "test long_running"))))
+       :on-success (lambda (r) (setq result r done t))
+       :on-failure (lambda (_) (setq done t)))
+      ;; Wait for at least one notification before cancelling
+      (with-timeout (5 (error "Timed out waiting for first notification"))
+        (while (null (cdr collected))
+          (accept-process-output nil 0.05)))
+      (acp-send-notification
+       :client client
+       :notification (acp-make-session-cancel-notification :session-id session-id))
+      ;; Wait for prompt to complete
+      (with-timeout (10 (error "Timed out waiting for prompt to complete"))
+        (while (not done)
+          (accept-process-output nil 0.05)))
+      (should result)
+      (should (equal (map-elt result 'stopReason) "end_turn"))
+      (should (< (length (cdr collected)) 6)))))
+
 ;;; Error handling tests
 
 (ert-deftest mock-acp-integration-prompt-error ()

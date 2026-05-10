@@ -1,3 +1,4 @@
+import asyncio
 import json
 from pathlib import Path
 from typing import Any
@@ -47,6 +48,9 @@ def load_extra(name: str) -> dict:
 class MockAgent:
     _conn: Client
 
+    def __init__(self) -> None:
+        self._cancelled: dict[str, asyncio.Event] = {}
+
     def on_connect(self, conn: Client) -> None:
         self._conn = conn
 
@@ -68,7 +72,8 @@ class MockAgent:
         return NewSessionResponse.model_validate(load_golden("new_session_response"))
 
     async def cancel(self, session_id: str, **kwargs: Any) -> None:
-        pass
+        if session_id in self._cancelled:
+            self._cancelled[session_id].set()
 
     async def ext_method(self, method: str, params: dict[str, Any]) -> dict[str, Any]:
         return {}
