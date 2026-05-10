@@ -12,17 +12,22 @@
   (expand-file-name ".venv/bin/python" mock-acp-integration--project-root)
   "Path to Python binary in the project's virtual environment.")
 
+(defmacro mock-acp-integration--with-server (server client-var &rest body)
+  "Evaluate BODY with CLIENT-VAR bound to a client running SERVER script."
+  (declare (indent 2))
+  `(let ((default-directory mock-acp-integration--project-root)
+         (,client-var (acp-make-client
+                       :command mock-acp-integration--python
+                       :command-params (list ,server))))
+     (unwind-protect
+         (progn ,@body)
+       (acp-shutdown :client ,client-var))))
+
 (defmacro mock-acp-integration--with-client (client-var &rest body)
   "Evaluate BODY with CLIENT-VAR bound to a live mock-acp client.
 Ensures the subprocess runs in the project root directory and handles cleanup."
   (declare (indent 1))
-  `(let ((default-directory mock-acp-integration--project-root)
-         (,client-var (acp-make-client
-                       :command mock-acp-integration--python
-                       :command-params '("src/main.py"))))
-     (unwind-protect
-         (progn ,@body)
-       (acp-shutdown :client ,client-var))))
+  `(mock-acp-integration--with-server "src/main.py" ,client-var ,@body))
 
 (defun mock-acp-integration--initialize (client)
   (acp-send-request
@@ -410,6 +415,41 @@ The error response contains code -32603 and message \"Internal error\"."
         (should (string-match "ACP request failed" msg))
         (should (string-match "-32603" msg))
         (should (string-match "Internal error" msg))))))
+
+;;; Init-error server tests
+
+(ert-deftest mock-acp-integration-init-error-initialize ()
+  "init_error_server raises an internal error on initialize."
+  (mock-acp-integration--with-server "src/init_error_server.py" client
+    (let (error-msg)
+      (condition-case err
+          (mock-acp-integration--initialize client)
+        (error (setq error-msg (cdr err))))
+      (should error-msg)
+      (let ((msg (format "%s" error-msg)))
+        (should (string-match "ACP request failed" msg))
+        (should (string-match "-32603" msg))
+        (should (string-match "Internal error" msg))))))
+
+
+;;; Auth-error server tests
+
+(ert-deftest mock-acp-integration-auth-error-authenticate ()
+  "auth_error_server raises an auth-required error on authenticate."
+  (mock-acp-integration--with-server "src/auth_error_server.py" client
+    (mock-acp-integration--initialize client)
+    (let (error-msg)
+      (condition-case err
+          (acp-send-request
+           :client client
+           :request (acp-make-authenticate-request :method-id "token" :method "token")
+           :sync t)
+        (error (setq error-msg (cdr err))))
+      (should error-msg)
+      (let ((msg (format "%s" error-msg)))
+        (should (string-match "ACP request failed" msg))
+        (should (string-match "-32000" msg))
+        (should (string-match "Authentication required" msg))))))
 
 (provide 'mock-acp-integration-test)
 ;;; mock-acp-integration-test.el ends here

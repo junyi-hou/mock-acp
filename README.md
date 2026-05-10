@@ -25,9 +25,17 @@ make build
 
 ## Running
 
+Three servers are available, each launched the same way:
+
 ```bash
-direnv exec <project-path> python <project-path>/src/main.py
+direnv exec <project-path> python <project-path>/src/<server>
 ```
+
+| Server | File | Behaviour |
+|---|---|---|
+| Normal mock | `main.py` | All scenarios work as documented below |
+| Init error | `init_error_server.py` | `initialize` raises `-32603 Internal error`; all subsequent requests are unreachable |
+| Auth error | `auth_error_server.py` | `initialize` succeeds; `authenticate` raises `-32000 Authentication required` |
 
 ## Request → Response reference
 
