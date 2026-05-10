@@ -188,6 +188,23 @@ mutated in place as requests arrive. Use (cdr collected) for the actual items."
         (should (equal (map-elt content 'type) "text"))
         (should (string-match "Thinking" (map-elt content 'text)))))))
 
+(ert-deftest mock-acp-integration-prompt-long-running ()
+  "Prompt with 'test long_running' triggers 3 thought chunks then 3 message chunks."
+  (mock-acp-integration--with-client client
+    (mock-acp-integration--initialize client)
+    (let* ((session (mock-acp-integration--new-session client))
+           (session-id (map-elt session 'sessionId))
+           (collected (mock-acp-integration--collect-notifications client))
+           (result (mock-acp-integration--prompt client session-id "test long_running"))
+           (notifications (cdr collected)))
+      (should result)
+      (should (= (length notifications) 6))
+      (let ((types (mapcar #'mock-acp-integration--update-type notifications)))
+        (should (equal (seq-take types 3)
+                       '("agent_thought_chunk" "agent_thought_chunk" "agent_thought_chunk")))
+        (should (equal (seq-drop types 3)
+                       '("agent_message_chunk" "agent_message_chunk" "agent_message_chunk")))))))
+
 (ert-deftest mock-acp-integration-prompt-plan ()
   "Prompt with 'test plan' triggers a PlanUpdate notification with two entries."
   (mock-acp-integration--with-client client

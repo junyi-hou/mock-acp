@@ -147,9 +147,21 @@ SCENARIOS: dict[str, list] = {
         )
     ],
     "usage": [lambda: UsageUpdate.model_validate(load_extra("session_update_usage"))],
+    "long_running": [
+        lambda: AgentThoughtChunk.model_validate(load_golden("session_update_agent_thought_chunk")),
+        lambda: AgentThoughtChunk.model_validate(load_golden("session_update_agent_thought_chunk")),
+        lambda: AgentThoughtChunk.model_validate(load_golden("session_update_agent_thought_chunk")),
+        lambda: AgentMessageChunk.model_validate(load_golden("session_update_agent_message_chunk")),
+        lambda: AgentMessageChunk.model_validate(load_golden("session_update_agent_message_chunk")),
+        lambda: AgentMessageChunk.model_validate(load_golden("session_update_agent_message_chunk")),
+    ],
 }
 
 ALL_SCENARIOS = [step for steps in SCENARIOS.values() for step in steps]
+
+SCENARIO_DELAYS: dict[str, float] = {
+    "long_running": 1.5,
+}
 
 
 def _complete_tool_call(base: dict, content_text: str) -> dict:
@@ -250,11 +262,12 @@ class ScenarioAgent(MockAgent):
                 )
             else:
                 steps = SCENARIOS.get(keyword, [])
+                delay = SCENARIO_DELAYS.get(keyword, 0.1)
                 for factory in steps:
                     await self._conn.session_update(
                         session_id=session_id, update=factory()
                     )
-                    await asyncio.sleep(0.1)
+                    await asyncio.sleep(delay)
 
         return PromptResponse(stop_reason="end_turn", user_message_id=message_id)
 
