@@ -3,8 +3,7 @@ ACP_SRC   := $(DEPS_DIR)/acp
 TEST_FILE := $(CURDIR)/tests/mock-acp-integration-test.el
 
 .PHONY: build
-build: ## Initialize submodules and sync Python dependencies
-	git submodule update --init --recursive
+build: ## Sync Python dependencies
 	uv sync
 
 $(ACP_SRC):

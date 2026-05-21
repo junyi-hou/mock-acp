@@ -33,8 +33,8 @@ from acp.schema import (
     TextContentBlock,
 )
 
-GOLDEN = Path(__file__).parent.parent / "vendor" / "acp-sdk" / "tests" / "golden"
-FIXTURES = Path(__file__).parent.parent / "fixtures"
+GOLDEN = Path(__file__).parent.parent / "fixtures" / "golden"
+FIXTURES = Path(__file__).parent.parent / "fixtures" / "addition"
 
 
 def load_golden(name: str) -> dict:
